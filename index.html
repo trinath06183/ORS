@@ -6,8 +6,8 @@
     <title>QR Code Status Updater</title>
     <!-- 1. Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 2. QR Code Scanner Library -->
-    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <!-- 2. QR Code Scanner Library (CHANGED TO A DIFFERENT CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <style>
         /* Custom style for the scanner video feed */
         #qr-reader video {
@@ -56,14 +56,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        // Wait for the entire window, including external scripts, to load
+        window.onload = () => {
             
-            // --- 1. PASTE YOUR URL HERE ---
-            // Replace the placeholder text with your actual Google Apps Script URL
+            // --- 1. Your Google Apps Script URL ---
             const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbyCI_YRNfi4YYb5rvWg3p56BOcxlhGwvQbTz5e-SgmyZuiQ2gw-OaSIN1fl-OVwI5TIWA/exec';
             
-            // --- End of URL ---
-
+            // --- Get all elements ---
             const startBtn = document.getElementById('start-scan-btn');
             const stopBtn = document.getElementById('stop-scan-btn');
             const scanAgainBtn = document.getElementById('scan-again-btn');
@@ -131,49 +130,71 @@
                     });
                 }
             }
-            
-            // --- Start Button Click Event ---
-            startBtn.addEventListener('click', () => {
-                // Check if the URL has been pasted
-                if (!gasWebAppUrl || gasWebAppUrl === "PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE" || !gasWebAppUrl.startsWith('https://script.google.com/macros/s/')) {
-                    statusMessage.textContent = 'Please edit the HTML file and paste your Google Apps Script URL into the "gasWebAppUrl" variable.';
-                    statusMessage.classList.add('text-red-500');
-                    return;
+
+            // --- NEW: Function to set up all event listeners ---
+            // This will only be called *after* we confirm the library is loaded
+            function initializeApp() {
+                // --- Start Button Click Event ---
+                startBtn.addEventListener('click', () => {
+                    // Check if the URL has been pasted
+                    if (!gasWebAppUrl || gasWebAppUrl === "PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE" || !gasWebAppUrl.startsWith('https://script.google.com/macros/s/')) {
+                        statusMessage.textContent = 'Please edit the HTML file and paste your Google Apps Script URL into the "gasWebAppUrl" variable.';
+                        statusMessage.classList.add('text-red-500');
+                        return;
+                    }
+
+                    // Initialize the scanner
+                    html5QrcodeScanner = new Html5QrcodeScanner(
+                        "qr-reader", // ID of the element to render the scanner in
+                        { 
+                            fps: 10, 
+                            qrbox: { width: 250, height: 250 } // Size of the scanning box
+                        },
+                        false // verbose = false
+                    );
+
+                    // Start scanning
+                    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+                    // Update UI
+                    setupSection.classList.add('hidden');
+                    scannerSection.classList.remove('hidden');
+                    scanAgainBtn.classList.add('hidden');
+                    statusMessage.textContent = 'Scanner started. Please scan a QR code.';
+                    statusMessage.classList.remove('text-red-500');
+                });
+
+                // --- Stop Button Click Event ---
+                stopBtn.addEventListener('click', () => {
+                    stopScanning();
+                    setupSection.classList.remove('hidden');
+                    statusMessage.textContent = 'Scanner stopped. You can start again.';
+                });
+
+                // --- Scan Again Button Click Event ---
+                scanAgainBtn.addEventListener('click', () => {
+                    startBtn.click(); // Re-click the start button
+                });
+            }
+
+            // --- NEW: Function to check if the scanner library is loaded ---
+            function checkLibraryReady() {
+                if (typeof Html5QrcodeScanner !== 'undefined') {
+                    // The library is loaded! Run the app setup.
+                    console.log("Scanner library is loaded.");
+                    initializeApp();
+                } else {
+                    // Library not ready, check again in 100 milliseconds
+                    console.log("Waiting for scanner library...");
+                    statusMessage.textContent = 'Loading scanner library...';
+                    setTimeout(checkLibraryReady, 100);
                 }
+            }
 
-                // Initialize the scanner
-                html5QrcodeScanner = new Html5QrcodeScanner(
-                    "qr-reader", // ID of the element to render the scanner in
-                    { 
-                        fps: 10, 
-                        qrbox: { width: 250, height: 250 } // Size of the scanning box
-                    },
-                    false // verbose = false
-                );
-
-                // Start scanning
-                html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-
-                // Update UI
-                setupSection.classList.add('hidden');
-                scannerSection.classList.remove('hidden');
-                scanAgainBtn.classList.add('hidden');
-                statusMessage.textContent = 'Scanner started. Please scan a QR code.';
-                statusMessage.classList.remove('text-red-500');
-            });
-
-            // --- Stop Button Click Event ---
-            stopBtn.addEventListener('click', () => {
-                stopScanning();
-                setupSection.classList.remove('hidden');
-                statusMessage.textContent = 'Scanner stopped. You can start again.';
-            });
-
-            // --- Scan Again Button Click Event ---
-            scanAgainBtn.addEventListener('click', () => {
-                startBtn.click(); // Re-click the start button
-            });
-        });
+            // --- Start the check ---
+            checkLibraryReady();
+        
+        };
     </script>
 </body>
 </html>
