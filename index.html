@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Status Updater</title>
+    <!-- 1. Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <style>
+        /* Custom style for the scanner video feed */
+        #qr-reader video {
+            width: 100% !important;
+            height: auto !important;
+            border-radius: 0.5rem; /* 8px */
+        }
+        /* Style for the scan region box */
+        #qr-reader-region {
+            border: 2px solid green !important; /* Changed to green */
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+
+    <div class="bg-white p-6 md:p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">QR Code Status Updater</h1>
+
+        <!-- Step 1: Start Button -->
+        <div id="setup-section" class="mb-4">
+            <button id="start-scan-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md mt-4 transition duration-200">
+                Start Scanning
+            </button>
+        </div>
+
+        <!-- Step 2: QR Code Scanner -->
+        <div id="scanner-section" class="hidden">
+            <!-- This div is where the scanner will be rendered -->
+            <div id="qr-reader" class="w-full rounded-md"></div>
+            <button id="stop-scan-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md mt-4 transition duration-200">
+                Stop Scanning
+            </button>
+        </div>
+        
+        <!-- Step 3: Status Messages -->
+        <div id="status-section" class="mt-4">
+            <h2 class="text-lg font-semibold text-gray-700">Status:</h2>
+            <div id="status-message" class="mt-2 p-3 bg-gray-50 rounded-md text-gray-600 min-h-[50px] overflow-auto">
+                Click "Start Scanning" to begin.
+            </div>
+            <button id="scan-again-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md mt-4 transition duration-200 hidden">
+                Scan Another Code
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- 1. PASTE YOUR URL HERE ---
+            // Replace the placeholder text with your actual Google Apps Script URL
+            const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbyCI_YRNfi4YYb5rvWg3p56BOcxlhGwvQbTz5e-SgmyZuiQ2gw-OaSIN1fl-OVwI5TIWA/exec';
+            
+            // --- End of URL ---
+
+            const startBtn = document.getElementById('start-scan-btn');
+            const stopBtn = document.getElementById('stop-scan-btn');
+            const scanAgainBtn = document.getElementById('scan-again-btn');
+            const statusMessage = document.getElementById('status-message');
+            const setupSection = document.getElementById('setup-section');
+            const scannerSection = document.getElementById('scanner-section');
+
+            let html5QrcodeScanner;
+
+            // --- Function to be called on successful scan ---
+            function onScanSuccess(decodedText, decodedResult) {
+                // Stop the scanner
+                stopScanning();
+                
+                statusMessage.textContent = `Scanned: ${decodedText}. Updating status in Google Sheet...`;
+                statusMessage.classList.remove('text-red-500', 'text-green-500');
+                statusMessage.classList.add('text-blue-500');
+
+                // Send the scanned data to the Google Apps Script
+                fetch(gasWebAppUrl, {
+                    method: 'POST',
+                    mode: 'cors', // Important for GAS to work
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ qrData: decodedText }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        statusMessage.textContent = data.message;
+                        statusMessage.classList.remove('text-blue-500', 'text-red-500');
+                        statusMessage.classList.add('text-green-500');
+                    } else {
+                        statusMessage.textContent = `Error: ${data.message}`;
+                        statusMessage.classList.remove('text-blue-500', 'text-green-500');
+                        statusMessage.classList.add('text-red-500');
+                    }
+                    scanAgainBtn.classList.remove('hidden');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    statusMessage.textContent = `Fetch Error: Could not connect to the script. ${error.message}`;
+                    statusMessage.classList.remove('text-blue-500', 'text-green-500');
+                    statusMessage.classList.add('text-red-500');
+                    scanAgainBtn.classList.remove('hidden');
+                });
+            }
+
+            // --- Function to handle scan failure (optional) ---
+            function onScanFailure(error) {
+                // This will be called frequently, so it's best to keep it quiet
+                // console.warn(`QR scan error: ${error}`);
+            }
+
+            // --- Function to stop the scanner ---
+            function stopScanning() {
+                if (html5QrcodeScanner && html5QrcodeScanner.getState() === 2) { // 2 = SCANNING
+                    html5QrcodeScanner.stop().then(() => {
+                        console.log("Scanner stopped.");
+                        scannerSection.classList.add('hidden');
+                        document.getElementById('qr-reader').innerHTML = ""; // Clear the scanner UI
+                    }).catch(err => {
+                        console.error("Failed to stop scanner", err);
+                    });
+                }
+            }
+            
+            // --- Start Button Click Event ---
+            startBtn.addEventListener('click', () => {
+                // Check if the URL has been pasted
+                if (!gasWebAppUrl || gasWebAppUrl === "PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE" || !gasWebAppUrl.startsWith('https://script.google.com/macros/s/')) {
+                    statusMessage.textContent = 'Please edit the HTML file and paste your Google Apps Script URL into the "gasWebAppUrl" variable.';
+                    statusMessage.classList.add('text-red-500');
+                    return;
+                }
+
+                // Initialize the scanner
+                html5QrcodeScanner = new Html5QrcodeScanner(
+                    "qr-reader", // ID of the element to render the scanner in
+                    { 
+                        fps: 10, 
+                        qrbox: { width: 250, height: 250 } // Size of the scanning box
+                    },
+                    false // verbose = false
+                );
+
+                // Start scanning
+                html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+                // Update UI
+                setupSection.classList.add('hidden');
+                scannerSection.classList.remove('hidden');
+                scanAgainBtn.classList.add('hidden');
+                statusMessage.textContent = 'Scanner started. Please scan a QR code.';
+                statusMessage.classList.remove('text-red-500');
+            });
+
+            // --- Stop Button Click Event ---
+            stopBtn.addEventListener('click', () => {
+                stopScanning();
+                setupSection.classList.remove('hidden');
+                statusMessage.textContent = 'Scanner stopped. You can start again.';
+            });
+
+            // --- Scan Again Button Click Event ---
+            scanAgainBtn.addEventListener('click', () => {
+                startBtn.click(); // Re-click the start button
+            });
+        });
+    </script>
+</body>
+</html>
